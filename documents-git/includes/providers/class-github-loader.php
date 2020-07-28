@@ -30,6 +30,19 @@ class GithubLoader extends BaseLoader {
         return array($datetime, $response_code);
     }
 
+    protected function get_wiki() {
+        if (!empty($this->token)) {
+            $args['headers']['Authorization'] = $this->get_auth_header();
+        }
+
+        $get_url = "https://$this->domain/$this->file_path";
+        $wp_remote = wp_remote_get($get_url, $args);
+        $response_body = wp_remote_retrieve_body($wp_remote);
+        $response_code = wp_remote_retrieve_response_code($wp_remote);
+
+        return array($response_body, $response_code);
+    }
+
     protected function get_document() {
         $args = array(
             'body' => array(
