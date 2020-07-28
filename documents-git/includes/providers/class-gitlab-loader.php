@@ -48,6 +48,19 @@ class GitlabLoader extends BaseLoader {
         return array($response_body, $response_code);
     }
 
+    protected function get_wiki() {
+        if (!empty($this->token)) {
+            $args['headers']['Authorization'] = $this->get_auth_header();
+        }
+
+        $get_url = "https://$this->domain/$this->file_path";
+        $wp_remote = wp_remote_get($get_url, $args);
+        $response_body = wp_remote_retrieve_body($wp_remote);
+        $response_code = wp_remote_retrieve_response_code($wp_remote);
+
+        return array($response_body, $response_code);
+    }
+
     protected function get_nbviewer_url()
     {
         $url = "https://nbviewer.jupyter.org/urls/$this->domain/$this->owner/$this->repo/-/raw/$this->branch/$this->file_path";
@@ -72,6 +85,15 @@ class GitlabLoader extends BaseLoader {
         $this->owner = urlencode($owner);
         $this->branch = $branch;
         $this->file_path = $file_path;
+    }
+
+    protected function set_wiki_details($url)
+    {
+        $url_parsed = parse_url($url);
+        $domain = $url_parsed['host'];
+        $path = $url_parsed['path'];
+        $this->domain = $domain;
+        $this->file_path = $path;
     }
 
     protected function get_auth_header()

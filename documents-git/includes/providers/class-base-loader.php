@@ -24,6 +24,7 @@ abstract class BaseLoader {
         add_shortcode("git-$provider-jupyter", array($this, 'doJupyter'));
         add_shortcode("git-$provider-checkout", array($this, 'doCheckout'));
         add_shortcode("git-$provider-history", array($this, 'doHistory'));
+        add_shortcode("git-$provider-wiki", array($this, 'doWiki'));
     }
 
     /**
@@ -33,6 +34,14 @@ abstract class BaseLoader {
      * @return mixed array of response body and HTTP response code
      */
     abstract protected function get_document();
+
+    /**
+     * The API specific function to return the raw Markdown document and HTTP response code.
+     * In case of an API error, the response body is not used.
+     *
+     * @return mixed array of response body and HTTP response code
+     */
+    abstract protected function get_wiki();
 
     /**
      * The API specific function to return the raw date of the last commit of the file and HTTP response code.
@@ -142,6 +151,56 @@ abstract class BaseLoader {
         $args = array(
             'body' => json_encode(array(
                 "text" => $raw_markdown
+            )),
+            'headers' => array(
+                'Content-Type' => 'application/json'
+            )
+        );
+
+        // Add the Github credentials to have high /markdown rate limits
+        $GITHUB_USER = MARKDOWNGIT_CONFIG['Github']['user'];
+        $GITHUB_TOKEN = MARKDOWNGIT_CONFIG['Github']['token'];
+        if (!empty($GITHUB_USER) or !empty($GITHUB_TOKEN)) {
+            $args['headers']['Authorization'] = 'Basic ' . base64_encode($GITHUB_USER . ':' . $GITHUB_TOKEN);
+        }
+
+        $response = wp_remote_post(self::$GITHUB_MARKDOWN_API, $args);
+        $html_body = wp_remote_retrieve_body($response);
+
+        return '<div class="markdown-body">' . $html_body . '</div>';
+    }
+
+    /**
+     * The callback function for the "wiki" shortcode action.
+     *
+     * @param $sc_attrs array Shortcode attributes
+     * @return string HTML of the whole Markdown document processed by Github's markdown endpoint
+     *
+     */
+    public function doWiki($sc_attrs)
+    {
+
+        list($raw_markdown, $response_code) = $this->get_raw_wiki($sc_attrs);
+
+        switch ($response_code) {
+            case 200:
+                break;
+            case 404:
+                $raw_markdown = "# 404 - Not found\nDocument not found.";
+                break;
+            case 401:
+                $raw_markdown = "# 401 - Bad credentials.\nPlease review access token for user " . $this->user;
+                break;
+            case 403:
+                $raw_markdown = "# 403 - Bad credentials.\nPlease review access token for user " . $this->user;
+                break;
+            default:
+                $raw_markdown = "# 500 - Server Error.\n$raw_markdown";
+        }
+
+        $args = array(
+            'body' => json_encode(array(
+                "text" => json_decode($raw_markdown)->content
             )),
             'headers' => array(
                 'Content-Type' => 'application/json'
@@ -272,6 +331,15 @@ abstract class BaseLoader {
         $url = $this->extract_attributes($sc_attrs);
         $this->set_repo_details($url);
         list($raw_document, $response_code) = $this->get_document();
+
+        return array($raw_document, $response_code);
+    }
+
+    private function get_raw_wiki($sc_attrs)
+    {
+        $url = $this->extract_attributes($sc_attrs);
+        $this->set_wiki_details($url);
+        list($raw_document, $response_code) = $this->get_wiki();
 
         return array($raw_document, $response_code);
     }
